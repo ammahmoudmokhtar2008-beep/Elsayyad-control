@@ -40,9 +40,11 @@ class GestureActivity : ComponentActivity() {
     private val cameraExecutor = Executors.newSingleThreadExecutor()
     private var recognizer: GestureRecognizer? = null
     private var lastActionAt = 0L
-    private var previousWristY: Float? = null
+    private var swipeAnchorY: Float? = null
+    private var swipeAnchorAt = 0L
     private var stablePose = ""
     private var stableSince = 0L
+    private var poseFired = false
 
     private val cameraPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startCamera() else showStatus("لازم تسمح بالكاميرا لتشغيل إشارات اليد")
@@ -114,32 +116,41 @@ class GestureActivity : ComponentActivity() {
     private fun handleResult(result: GestureRecognizerResult) {
         val now = SystemClock.elapsedRealtime()
         val category = result.gestures().firstOrNull()?.firstOrNull()?.categoryName().orEmpty()
-        val wristY = result.landmarks().firstOrNull()?.firstOrNull()?.y()
-        if (wristY != null) {
-            val previous = previousWristY
-            if (previous != null && category != "None" && now - lastActionAt > 1100L) {
-                val delta = wristY - previous
-                if (abs(delta) > 0.18f) {
+        val points = result.landmarks().firstOrNull()
+        val wristY = points?.firstOrNull()?.y()
+
+        // A deliberate vertical hand movement is accumulated over time (not frame-to-frame jitter).
+        if (wristY != null && category.isNotBlank() && category != "None") {
+            val anchor = swipeAnchorY
+            if (anchor == null || now - swipeAnchorAt > 900L) {
+                swipeAnchorY = wristY
+                swipeAnchorAt = now
+            } else if (now - swipeAnchorAt >= 220L && now - lastActionAt > 1100L) {
+                val delta = wristY - anchor
+                if (abs(delta) > 0.16f) {
                     if (delta < 0) performGestureAction(3, "تحريك لأعلى — تمرير لأعلى")
                     else performGestureAction(4, "تحريك لأسفل — تمرير لأسفل")
-                    previousWristY = wristY
+                    swipeAnchorY = wristY
+                    swipeAnchorAt = now
                     return
                 }
             }
-            previousWristY = wristY
+        } else {
+            swipeAnchorY = null
         }
 
         if (category != stablePose) {
             stablePose = category
             stableSince = now
+            poseFired = false
         }
-        if (now - stableSince < 850L || now - lastActionAt < 1100L) return
+        if (poseFired || now - stableSince < 700L || now - lastActionAt < 1100L) return
 
         when (category) {
-            "Thumb_Up" -> performGestureAction(1, "رفع الصوت")
-            "Thumb_Down" -> performGestureAction(2, "خفض الصوت")
-            "Open_Palm" -> performGestureAction(5, "الشاشة الرئيسية")
-            "Closed_Fist" -> performGestureAction(6, "فتح تطبيق الصياد كنترول")
+            "Thumb_Up" -> { poseFired = true; performGestureAction(1, "رفع الصوت") }
+            "Thumb_Down" -> { poseFired = true; performGestureAction(2, "خفض الصوت") }
+            "Open_Palm" -> { poseFired = true; performGestureAction(5, "الشاشة الرئيسية") }
+            "Closed_Fist" -> { poseFired = true; performGestureAction(6, "فتح تطبيق الصياد كنترول") }
         }
     }
 
