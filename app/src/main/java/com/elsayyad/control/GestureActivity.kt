@@ -27,11 +27,11 @@ import kotlin.math.abs
 /**
  * Camera-based gesture controller.
  * Gesture map:
- * 1 Thumb_Up -> volume up
- * 2 Thumb_Down -> volume down
+ * 1 Open_Palm held -> volume up
+ * 2 Thumb/ILoveYou pose -> volume down
  * 3 vertical hand movement upward -> scroll up
  * 4 vertical hand movement downward -> scroll down
- * 5 Open_Palm held -> Home
+ * 5 Open_Palm moved sideways -> Home
  * 6 Closed_Fist held -> reopen Elsayyad Control
  */
 class GestureActivity : ComponentActivity() {
@@ -41,6 +41,7 @@ class GestureActivity : ComponentActivity() {
     private var recognizer: GestureRecognizer? = null
     private var lastActionAt = 0L
     private var swipeAnchorY: Float? = null
+    private var swipeAnchorX: Float? = null
     private var swipeAnchorAt = 0L
     private var stablePose = ""
     private var stableSince = 0L
@@ -117,9 +118,27 @@ class GestureActivity : ComponentActivity() {
         val now = SystemClock.elapsedRealtime()
         val category = result.gestures().firstOrNull()?.firstOrNull()?.categoryName().orEmpty()
         val points = result.landmarks().firstOrNull()
-        val wristY = points?.firstOrNull()?.y()
+        val wrist = points?.firstOrNull()
+        val wristY = wrist?.y()
+        val wristX = wrist?.x()
 
-        // A deliberate vertical hand movement is accumulated over time (not frame-to-frame jitter).
+        // Open palm moved sideways is the distinct HOME gesture shown near the end of the supplied clip.
+        if (category == "Open_Palm" && wristX != null) {
+            val anchorX = swipeAnchorX
+            if (anchorX == null || now - swipeAnchorAt > 900L) {
+                swipeAnchorX = wristX
+                swipeAnchorAt = now
+            } else if (now - swipeAnchorAt >= 220L && abs(wristX - anchorX) > 0.16f && now - lastActionAt > 1100L) {
+                performGestureAction(5, "حركة الكف — الشاشة الرئيسية")
+                swipeAnchorX = wristX
+                swipeAnchorAt = now
+                return
+            }
+        } else {
+            swipeAnchorX = null
+        }
+
+        // Vertical movement is accumulated over time to avoid frame-to-frame camera jitter.
         if (wristY != null && category.isNotBlank() && category != "None") {
             val anchor = swipeAnchorY
             if (anchor == null || now - swipeAnchorAt > 900L) {
@@ -147,9 +166,8 @@ class GestureActivity : ComponentActivity() {
         if (poseFired || now - stableSince < 700L || now - lastActionAt < 1100L) return
 
         when (category) {
-            "Thumb_Up" -> { poseFired = true; performGestureAction(1, "رفع الصوت") }
-            "Thumb_Down" -> { poseFired = true; performGestureAction(2, "خفض الصوت") }
-            "Open_Palm" -> { poseFired = true; performGestureAction(5, "الشاشة الرئيسية") }
+            "Open_Palm" -> { poseFired = true; performGestureAction(1, "رفع الصوت") }
+            "Thumb_Up", "Thumb_Down", "ILoveYou" -> { poseFired = true; performGestureAction(2, "خفض الصوت") }
             "Closed_Fist" -> { poseFired = true; performGestureAction(6, "فتح تطبيق الصياد كنترول") }
         }
     }
