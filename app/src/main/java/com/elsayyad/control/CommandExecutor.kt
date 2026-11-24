@@ -66,6 +66,7 @@ object CommandExecutor {
         val prefixes = listOf("من فضلك افتح ", "ممكن تفتح ", "افتحلي ", "افتح ", "شغل ", "شغللي ", "روح على ", "اذهب الى ")
         var value = text
         for (prefix in prefixes) if (value.startsWith(prefix)) { value = value.removePrefix(prefix); break }
+        value = value.removePrefix("تطبيق ").removePrefix("برنامج ").removePrefix("ابلكيشن ")
         return value.trim()
     }
 
@@ -74,11 +75,19 @@ object CommandExecutor {
         val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val matches = pm.queryIntentActivities(launcher, PackageManager.MATCH_ALL)
         val target = normalize(spokenName)
+        val aliases = mapOf(
+            "يوتيوب" to "youtube", "فيسبوك" to "facebook", "واتساب" to "whatsapp",
+            "انستجرام" to "instagram", "انستا" to "instagram", "تيك توك" to "tiktok",
+            "تليجرام" to "telegram", "ماسنجر" to "messenger", "سناب شات" to "snapchat",
+            "جوجل كروم" to "chrome", "كروم" to "chrome"
+        )
+        val searchTerms = listOf(target, aliases[target].orEmpty()).filter { it.isNotBlank() }
         val best = matches.mapNotNull { info ->
             val label = normalize(info.loadLabel(pm).toString())
+            val packageName = normalize(info.activityInfo.packageName.substringAfterLast('.'))
             val score = when {
-                label == target -> 3
-                label.contains(target) || target.contains(label) -> 2
+                searchTerms.any { label == it || packageName == it } -> 3
+                searchTerms.any { label.contains(it) || it.contains(label) || packageName.contains(it) } -> 2
                 else -> 0
             }
             if (score > 0) info to score else null
