@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">الصياد كنترول</string>
+    <string name="accessibility_description">تنفيذ أوامر التحكم التي يطلبها المستخدم داخل الهاتف.</string>
+</resources>
